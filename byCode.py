@@ -40,7 +40,7 @@ judge = Agent(name="judge", instructions=judgement,tools=[print_joke],model_sett
 
 # Orchestration by code
 async def judge_jokes():
-    with trace("Comedy Battle"):
+    with trace("Code Orchestration"):
         commedians=[comedian1, comedian2]
         results = await asyncio.gather(
             Runner.run(comedian1, message),
