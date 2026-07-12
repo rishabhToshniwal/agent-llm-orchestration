@@ -1,11 +1,12 @@
 # LLM Orchestration Examples
 
-Two ways to orchestrate multiple agents with the [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/), using the same comedy-battle scenario: two comedians generate one-liner jokes; a judge picks the winner.
+Three ways to orchestrate multiple agents with the [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/), using the same comedy-battle scenario: two comedians generate one-liner jokes; a judge picks the winner.
 
 | Script | Pattern | Who controls the flow? |
 |--------|---------|------------------------|
 | [`byCode.py`](byCode.py) | **Orchestration by code** | Your Python code (`asyncio.gather`, `Runner.run`) |
-| [`byLlm.py`](byLlm.py) | **Orchestration by LLM** | A manager agent decides which tools to call and when |
+| [`byLlm.py`](byLlm.py) | **Orchestration by LLM** | One manager agent calls sub-agents as tools |
+| [`byHandoff.py`](byHandoff.py) | **Orchestration by handoff** | One agent delegates to another via `handoffs` |
 
 ---
 
@@ -62,12 +63,50 @@ flowchart LR
 python byLlm.py
 ```
 
+---
+
+## Orchestration by handoff (`byHandoff.py`)
+
+Similar to `byLlm.py`, comedians are wrapped as tools — but work is split across **two agents** using SDK **handoffs**:
+
+1. **auditioner** calls `joke_teller_1` and `joke_teller_2` to collect jokes.
+2. **auditioner** **hands off** to **judge** (via `handoffs=[judge]`).
+3. **judge** evaluates the jokes and calls `print_joke` with the summary and winner.
+
+Only one `Runner.run(auditioner, task)` is needed; the SDK transfers control between agents.
+
+```mermaid
+flowchart LR
+    task[Task prompt] --> auditioner[auditioner agent]
+    auditioner --> tool1[joke_teller_1]
+    auditioner --> tool2[joke_teller_2]
+    tool1 --> auditioner
+    tool2 --> auditioner
+    auditioner -->|handoff| judge[judge agent]
+    judge --> summary[print_joke tool]
+```
+
+**Best when:** you want clear separation of roles (gather vs decide), each agent with its own instructions, and explicit delegation instead of one agent owning every tool.
+
+```bash
+python byHandoff.py
+```
+
+Opens the agent graph (`draw_graph(auditioner)`) before running — shows auditioner, its tools, and the handoff edge to judge.
+
+---
+
 ### View the agent graph
 
-`byLlm.py` can visualize the judge agent and its tools with `draw_graph`:
+`byLlm.py` and `byHandoff.py` can visualize agents with `draw_graph`:
 
 ```python
+# byLlm.py — judge and all tools
 graph = draw_graph(judge)
+
+# byHandoff.py — auditioner, tools, and handoff to judge
+graph = draw_graph(auditioner)
+
 graph.view()          # opens in default viewer
 # or
 draw_graph(judge, filename="judge_graph")  # saves judge_graph.png
@@ -79,13 +118,15 @@ Requires the **Graphviz system install** ([graphviz.org/download](https://graphv
 
 ## Comparison
 
-| | **byCode** | **byLlm** |
-|---|------------|-----------|
-| Flow defined in | Python (`judge_jokes`) | Judge agent instructions + task prompt |
-| Comedian agents | Called directly with `Runner.run` | Wrapped as tools (`as_tool`) |
-| Parallel jokes | Yes (`asyncio.gather`) | LLM calls tools sequentially or as it chooses |
-| Predictability | High | Depends on model behavior |
-| Visualization | N/A | `draw_graph(judge)` |
+| | **byCode** | **byLlm** | **byHandoff** |
+|---|------------|-----------|---------------|
+| Flow defined in | Python (`judge_jokes`) | Judge instructions + task prompt | Auditioner + judge instructions + task |
+| Comedian agents | Called directly with `Runner.run` | Wrapped as tools on judge | Wrapped as tools on auditioner |
+| Who picks winner | Separate judge `Runner.run` | Same judge agent | Judge agent after handoff |
+| Parallel jokes | Yes (`asyncio.gather`) | LLM decides tool order | LLM decides tool order |
+| Agent separation | Multiple explicit runs | Single manager agent | Two agents via `handoffs` |
+| Predictability | High | Depends on model | Depends on model |
+| Visualization | N/A | `draw_graph(judge)` | `draw_graph(auditioner)` |
 
 ---
 
@@ -93,7 +134,7 @@ Requires the **Graphviz system install** ([graphviz.org/download](https://graphv
 
 - **Python 3.12+**
 - **OpenAI API key** — [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
-- **Graphviz** (optional, for `draw_graph` in `byLlm.py`) — [graphviz.org/download](https://graphviz.org/download/)
+- **Graphviz** (optional, for `draw_graph` in `byLlm.py` / `byHandoff.py`) — [graphviz.org/download](https://graphviz.org/download/)
 
 ## Setup
 
@@ -116,7 +157,7 @@ cp .env.example .env
 
 ## Corporate proxy (optional)
 
-If API calls fail with SSL/certificate errors behind a corporate proxy, [`proxy_patch.py`](proxy_patch.py) disables SSL verification for `httpx` and `requests`. It is imported at the top of both scripts:
+If API calls fail with SSL/certificate errors behind a corporate proxy, [`proxy_patch.py`](proxy_patch.py) disables SSL verification for `httpx` and `requests`. It is imported at the top of all scripts:
 
 ```python
 import proxy_patch
@@ -139,7 +180,8 @@ Only use when needed — disabling SSL verification is less secure.
 ```
 llm-orchestration/
 ├── byCode.py          # Orchestration by code
-├── byLlm.py           # Orchestration by LLM (manager + tools)
+├── byLlm.py           # Orchestration by LLM (one manager + tools)
+├── byHandoff.py       # Orchestration by handoff (auditioner → judge)
 ├── proxy_patch.py     # Optional: SSL workaround for corporate proxies
 ├── requirements.txt
 ├── .env.example
@@ -149,7 +191,7 @@ llm-orchestration/
 
 ## Traces
 
-Both scripts use `with trace(...)` so runs appear on the [OpenAI Traces dashboard](https://platform.openai.com/traces).
+All scripts use `with trace(...)` so runs appear on the [OpenAI Traces dashboard](https://platform.openai.com/traces).
 
 ## License
 
