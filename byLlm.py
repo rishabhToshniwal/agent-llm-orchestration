@@ -54,11 +54,10 @@ Do not proceed until all two jokes are ready, one from each tool.
 judge = Agent(name="judge", instructions=judgement,tools=tools,model_settings=require_tool, model=OPENAI_MODEL)
 
 async def judge_jokes():
-  with trace("Judge"):
+  with trace("LLM Orchestration"):
    judge_result = await Runner.run(judge, task)
 
 # if __name__ == "__main__":
     # graph = draw_graph(judge)
     # graph.view()
-with trace("Sales manager"):
-    asyncio.run(judge_jokes())
+asyncio.run(judge_jokes())
