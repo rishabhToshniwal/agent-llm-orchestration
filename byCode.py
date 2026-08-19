@@ -1,4 +1,4 @@
-import proxy_patch
+# import proxy_patch  # uncomment if behind corp proxy (disables SSL verify)
 import os
 import asyncio
 from agents import Agent, ModelSettings, Runner, function_tool, trace
